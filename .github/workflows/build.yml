@@ -1,0 +1,56 @@
+name: Build unsigned IPA
+
+# Mac 없이 빌드하기 위한 워크플로.
+# 저장소에 올리면 자동으로 돌고, Actions 탭에서 Jamkkan-unsigned-ipa를 내려받을 수 있다.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build for iPhone (no signing)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Jamkkan.xcodeproj \
+            -scheme Jamkkan \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build | tee build.log
+
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/Jamkkan.app Payload/
+          zip -qry Jamkkan-unsigned.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Jamkkan-unsigned-ipa
+          path: Jamkkan-unsigned.ipa
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
